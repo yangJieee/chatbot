@@ -175,6 +175,7 @@ config = {
         "message_windows_size": 10000,
         "response_segment": {"min": 1000, "max": 20000},
     },
+    "file_path": "./conversation.json"
 }
 # from zhipuai import ZhipuAI
 # # chatbot = ZhipuAI(config)
@@ -199,7 +200,7 @@ API 数据路由：
 '''
 
 
-FILE_PATH = "./conversation.json"
+# FILE_PATH = "./conversation.json"
 
 class ChatNode():
     """chat节点
@@ -210,7 +211,6 @@ class ChatNode():
             config  app参数配置信息
         """
         self.chat_config = config
-
         # self.res = None
         self.chat = OpenAIChat(self.chat_config)
 
@@ -218,7 +218,11 @@ class ChatNode():
         self.chat_id = 0
         ## 取消的聊天ID
         self.cancel_chat_id = -1
-        
+        try:
+            with open(self.chat_config['file_path'], "x", encoding="utf-8") as f:
+                json.dump([], f, ensure_ascii=False, indent=4)
+        except FileExistsError:
+            pass # 如果文件已存在，则无需初始化
     '''
     def keyboard_control(self):
         """control task.
@@ -247,28 +251,34 @@ class ChatNode():
     #     }
     #     return data_obj
 
-    def __initialize_conversation_file__(self):
-        try:
-            with open(FILE_PATH, "x", encoding="utf-8") as f:
-                json.dump([], f, ensure_ascii=False, indent=4)
-        except FileExistsError:
-            pass # 如果文件已存在，则无需初始化
+    # def __initialize_conversation_file__(self):
+    #     try:
+    #         with open(FILE_PATH, "x", encoding="utf-8") as f:
+    #             json.dump([], f, ensure_ascii=False, indent=4)
+    #     except FileExistsError:
+    #         pass # 如果文件已存在，则无需初始化
 
     # 添加一条对话记录     
-    def add_conversation(self, bot_text: str):
+    def add_conversation(self, text: str, bot_res):
         # 获取当前时间戳
         time_stamp = time.time()
         # 读取现有记录
-        with open(FILE_PATH, "r", encoding="utf-8") as f:
+        with open(self.chat_config['file_path'], "r", encoding="utf-8") as f:
             conversations = json.load(f)
-        data_obj = {
-                'time_stamp': time_stamp,
-                'bot_text': bot_text
-        }
+        if bot_res:
+            data_obj = {
+                    'time_stamp': time_stamp,
+                    'bot_text': text
+            }
+        else:
+            data_obj = {
+                    'time_stamp': time_stamp,
+                    'user_text': text
+            }
         # 添加新记录
         conversations.append(data_obj)
         # 将更新后的记录写回文件
-        with open(FILE_PATH, "w", encoding="utf-8") as f:
+        with open(self.chat_config['file_path'], "w", encoding="utf-8") as f:
             json.dump(conversations, f, ensure_ascii=False, indent=4)
 
     def handle_mq_msg(self, msg, stream=True):
@@ -308,20 +318,22 @@ class ChatNode():
                 # print(f"chunkb: {answer_msg}")
                 if answer_msg is not None:
                     logger.info("{:2} {}".format(answer_msg['seq'], answer_msg['text']))
-                    return answer_msg['text']
+                    
                     # self.auto_send(self.create_answer_msg(answer_msg, self.chat_id))
                     
-            #         bot_list.append(answer_msg)  # 将 chunk 添加到列表
-            # bot_text = ''.join(bot_list) # 将列表字符串拼接为一个整体
-            # print(f"bot_text: {bot_text}")
-            # self.add_conversation(bot_text) # 将bot回复保存到另一个json文件中
-                    
+                    bot_list.append(answer_msg)  # 将 chunk 添加到列表
+            # print(f"bot_list: {bot_list[0]['text']}")
+            # bot_text = ''.join(bot_list[0]['text']) # 将列表字符串拼接为一个整体
+            print(f"bot_text: {bot_list[0]['text']}")
+            self.add_conversation(bot_list[0]['text'], True) # 将bot回复保存到另一个json文件中
+            return answer_msg['text']
         else:
             answer_msg = self.chat.get_response(msg)
             logger.info("{:2} {}".format(answer_msg['seq'], answer_msg['text']))
             # self.auto_send(self.create_answer_msg(answer_msg, self.chat_id))
-            self.add_conversation(answer_msg) # 将bot回复保存到另一个json文件中
-            
+            self.add_conversation(answer_msg, True) # 将bot回复保存到另一个json文件中
+            return answer_msg['text']
+
     def shandle_mq_msg(self, msg, stream=True):
         """mq 消息处理, 根据请求执行相应操作
         Args: 
@@ -361,26 +373,31 @@ class ChatNode():
                     # socketio.emit('test', answer_msg)
                 # emit('test', answer_msg)
                 # socketio.emit('test', answer_msg)
-                print(f"msg: {answer_msg}")
+                # print(f"msg: {answer_msg}")
                 # for i in self.chat.sdecode_chunk(chunk):
                     # socketio.emit('response', i)
                     # print(i)
                 # print(f"chunkb: {answer_msg}")
                 if answer_msg is not None:
                     logger.info("{:2} {}".format(answer_msg['seq'], answer_msg['text']))
-                    return answer_msg['text']
+                    # return answer_msg['text']
                     # self.auto_send(self.create_answer_msg(answer_msg, self.chat_id))
                     
-            #         bot_list.append(answer_msg)  # 将 chunk 添加到列表
+                    bot_list.append(answer_msg)  # 将 chunk 添加到列表
+            # print(f"bot_list: {bot_list}")
             # bot_text = ''.join(bot_list) # 将列表字符串拼接为一个整体
             # print(f"bot_text: {bot_text}")
             # self.add_conversation(bot_text) # 将bot回复保存到另一个json文件中
+            print(f"bot_text: {bot_list[0]['text']}")
+            self.add_conversation(bot_list[0]['text'], True) # 将bot回复以字符串保存到另一个json文件中
+            return answer_msg['text']
                     
         else:
             answer_msg = self.chat.get_response(msg)
             logger.info("{:2} {}".format(answer_msg['seq'], answer_msg['text']))
             # self.auto_send(self.create_answer_msg(answer_msg, self.chat_id))
-            self.add_conversation(answer_msg) # 将bot回复保存到另一个json文件中               
+            self.add_conversation(answer_msg, True) # 将bot回复保存到另一个json文件中    
+            return answer_msg['text']           
 
 
     def launch(self):
@@ -396,10 +413,13 @@ class ChatNode():
         # mq_msg = self.auto_read()
         #     if mq_msg is not None:
         self.user_message = request.json.get("message", "").strip()
+        
+        
         print(f"user_message : {self.user_message}")
         if not self.user_message:
             return jsonify({"error": "Message cannot be empty"}), 400
         try:
+            self.add_conversation(self.user_message, False) #将用户输出记录
             response = self.handle_mq_msg(self.user_message)
             # print(f"bot_message : {response}")
             # 调用 OpenAIChat 实例的 chat 方法
@@ -426,6 +446,7 @@ class ChatNode():
         if not self.user_message:
             return jsonify({"error": "Message cannot be empty"}), 400
         try:
+            self.add_conversation(self.user_message, False) #将用户输出记录
             response = self.shandle_mq_msg(self.user_message)
             # print(f"bot_message : {response}")
             # 调用 OpenAIChat 实例的 chat 方法
@@ -451,7 +472,7 @@ def chat():
 def handle_start_stream(data):
     
     print(data)
-    data = json.loads(data)
+    # data = json.loads(data['message'])
     
     chat_node = ChatNode(config)
     chat_node.slaunch(data["message"])

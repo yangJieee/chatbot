@@ -252,7 +252,7 @@ class OpenAIChat():
                 msg = chunk.choices[0].delta.content  # extract the message 一个字一个字输出
                 finish_reason = chunk.choices[0].finish_reason
                 if msg is not None:
-                    server.emit("stream", msg)
+                    server.emit("stream", msg) # 在这里传输给前端
                 # yield msg
                 print(f"msg: {msg}") # 一个字一个字输出
                 # server.emit('test', msg)
@@ -288,5 +288,5 @@ class OpenAIChat():
             result['seq'] = self.answer_seq
             result['text'] = answer
             print(f"result: {result}")
-            # return result
+            return result
             # return msg
